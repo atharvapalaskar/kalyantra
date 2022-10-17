@@ -1,0 +1,21 @@
+{
+  "name": "kalyantra_nodeserver",
+  "version": "1.0.0",
+  "description": "Kalyantra : Well-being Bot , A raspberry pi iot project bot server",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon",
+    "build": "tsc",
+    "build:run": "node ./main/index.js"
+  },
+  "author": "Atharva Palaskar",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^18.11.0",
+    "kill-port": "^1.6.1",
+    "nodemon": "^2.0.4",
+    "ts-node": "^8.10.2",
+    "typescript": "^3.9.7"
+  }
+}

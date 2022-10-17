@@ -1,0 +1,6 @@
+{
+    "watch": ["./src/**/*", ".env"],
+    "ext": "ts",
+    "exec": "kill-port 3004 && ts-node ./src/index.ts",
+    "delay": "1500"
+  }
