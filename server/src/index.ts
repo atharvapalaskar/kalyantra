@@ -1,24 +1,19 @@
+import * as express from "express";
+import routes from "./routes";
+
 const main = async()=> {
   
-    console.log("starting node server") 
+    console.log("starting node server")   
 
-    function routesHandler (req, res) {  
-        if (req.url == '/a'){
-            res.writeHead(200, {'Content-Type': 'text/plain'}); 
-            res.write('Hi found a route');  
-            return res.end(); 
-        } else if (req.url == '/'){ 
-            res.writeHead(200, {'Content-Type': 'text/plain'}); 
-            res.write('Hi from raspi');  
-            return res.end(); 
-        } else {
-            res.writeHead(404, {'Content-Type': 'text/plain'});
-            return res.end("404 Not Found") 
-        } 
-    }
+    const app = express();
+    const server = require('http').Server(app); 
+    
+    app.use(express.json());
+    app.use(express.text());
+    app.use(express.urlencoded({extended: true}));   
+    app.use("/", routes);  
 
-    const server = require('http').Server(routesHandler); 
-        server.listen(3004,()=>{
+    server.listen(3004,()=>{
         console.log("started raspi node server at port 3004")
     }); 
 

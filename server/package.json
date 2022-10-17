@@ -10,7 +10,10 @@
   },
   "author": "Atharva Palaskar",
   "license": "ISC",
-  "dependencies": {},
+  "dependencies": {
+    "express": "^4.18.2",
+    "onoff": "^6.0.3"
+  },
   "devDependencies": {
     "@types/node": "^18.11.0",
     "kill-port": "^1.6.1",
