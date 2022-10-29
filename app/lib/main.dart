@@ -1,6 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart';
+import 'dart:convert';
+
+import 'package:app/components.dart';
+import 'package:app/enums.dart';
+import 'package:flutter/material.dart'; 
 import 'package:http/http.dart' as http;
+
+import 'env.dart';
 void main() {
   runApp(const MyApp());
 }
@@ -29,11 +34,52 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _counter = 0;
+  
+  String? ngrokurl;
+  NgConnectionState connectionState = NgConnectionState.disconnected;
+  BotStatus botStatus = BotStatus.notReady;
 
-  move( String _movee) async {
-    var res = await http.post(Uri.parse('https://6510-2405-201-10-7cfa-43e7-690-d536-69aa.in.ngrok.io/moves/${_movee}'));
-    print(res);
+  Future<void> connect() async {
+    setState(() {connectionState = NgConnectionState.connecting;});
+    try {
+       var res = await http.get(Uri.parse('https://api.ngrok.com/tunnels'),headers:{'ngrok-version': '2',"authorization": "Bearer $ngrokApiKey"});
+       var resBody = json.decode(res.body);
+
+       if((resBody["tunnels"] as List).isEmpty){
+         throw 'No url found' ;
+       } else {//assuming you are using free plan only 1 tunnel can be opened 
+          ngrokurl = resBody["tunnels"][0]['public_url'];
+          print(ngrokurl);
+          await botStatusApi('ready'); 
+          if(botStatus == BotStatus.ready){  
+             setState(() {connectionState = NgConnectionState.connected;});
+          } else { throw 'Not ready';}
+       }
+
+    } catch (e) {
+      print(e);
+      setState(() {connectionState = NgConnectionState.disconnected;});
+    } 
+  }
+
+  Future<void> move( String _movee) async {
+     try { var res = await http.post(Uri.parse('$ngrokurl/moves/$_movee')); 
+     if(json.decode(res.body)['msg']!='ok'){throw 'cant move';}
+     } catch(e) { print(e); setState(() {connectionState = NgConnectionState.disconnected;});  }
+   
+  }
+ 
+  Future<void> botStatusApi(String  _check) async {
+      try {
+         botStatus == BotStatus.checking;
+         var res = await http.get(Uri.parse('$ngrokurl/bot-status/$_check'));
+         if( json.decode(res.body)['msg'] == 'ready' ){botStatus = BotStatus.ready; return ; } 
+          else{ throw 'Not ready';}
+      } catch (e) {
+        print(e); 
+        return ;
+      }
+       
   }
 
   @override
@@ -45,66 +91,37 @@ class _HomeScreenState extends State<HomeScreen> {
           child:SafeArea( child: Container(height: 60,color: Colors.amber,child:const Center(child: Text('Kalyantra: Well-being bot',style: TextStyle(fontSize: 16,color: Colors.black, fontWeight: FontWeight.w700,) )),) ),
       ),
       body: Center( child: 
+       
+          Stack(children: [
+            
+            MovesBox(move),
+
+            connectionState != NgConnectionState.connected ?
+            Container(width: MediaQuery.of(context).size.width,color: Colors.black.withOpacity(0.86),
+             child:  
+              
+              connectionState == NgConnectionState.connecting?
+
+               Column(crossAxisAlignment: CrossAxisAlignment.center,mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Text('Connecting',style: TextStyle(color: Colors.white),),
+                  SizedBox(height: 12,),
+                  CircularProgressIndicator()
+              ],)
+              
+              : Column(crossAxisAlignment: CrossAxisAlignment.center,mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('Not connected',style: TextStyle(color: Colors.white),),
+                  TextButton(onPressed: ()async{ await connect();}, child: const Text('Tap to Connect :)'),)
+              ],),
+             
+            )
+            : const SizedBox()
+
+          ],),
       
-        Row( mainAxisAlignment: MainAxisAlignment.center,
-           children: [
-            Column( mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                 
-                 GestureDetector(onTap:(){
-                  print('left-front');
-                  move('left-front');
-                  },child: Transform.rotate(angle: 0.6,child: const Icon(Ionicons.arrow_undo_circle_outline,color: Colors.amber,size: 80,))),
-                 
-                 const SizedBox(height: 20,),
-                 
-                 GestureDetector(onTap:(){
-                  print('left-back');move('left-back');
-                 },child:Transform.rotate(angle: -10,child: const Icon(Ionicons.arrow_redo_circle_outline,color: Colors.amber,size: 80,))),  
-               
-              ],
-            ),
-            Column( mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                 GestureDetector(onTap:(){
-                  print('forward');move('forward');
-                 },child: const Icon(Ionicons.caret_up_circle_outline,color: Colors.amber,size: 80,)),
-                 
-                 const SizedBox(height: 20,),
-                 
-                 GestureDetector(onTap:(){
-                  print('halt');move('halt');
-                 },child: const Icon(Ionicons.stop_circle_outline,color: Colors.amber,size: 80,)),
-                 
-                 const SizedBox(height: 20,),
-
-                 GestureDetector(onTap:(){
-                  print('backward');move('backward');
-                 },child: const Icon(Ionicons.caret_down_circle_outline,color: Colors.amber,size: 80,)), 
-              ],
-            ),
-
-            Column( mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                 GestureDetector(onTap:(){
-                  print('right-front');move('right-front');
-                 },child:Transform.rotate(angle:-0.6,child:const Icon(Ionicons.arrow_redo_circle_outline,color: Colors.amber,size: 80,))),
-                
-                 const SizedBox(height: 20,),
-                
-                 GestureDetector(onTap:(){
-                  print('right-back');move('right-back');
-                 },child:Transform.rotate(angle: 10,child: const Icon(Ionicons.arrow_undo_circle_outline,color: Colors.amber,size: 80,),)),                    
-              ],
-            ),
-          ],
-        ),
-      ),
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: _incrementCounter,
-      //   tooltip: 'Increment',
-      //   child: const Icon(Icons.add),
-      // ), // This trailing comma makes auto-formatting nicer for build methods.
+       )
     );
   }
 }
+ 

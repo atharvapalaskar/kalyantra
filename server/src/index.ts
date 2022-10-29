@@ -1,9 +1,12 @@
 import * as express from "express";
 import routes from "./routes";
+import espeak, { EspeakOptions } from "./utils/espeakcmd";
+const ngrok = require('ngrok');
+require('dotenv').config();
 
 const main = async()=> {
   
-    console.log("starting node server")   
+    console.log("starting kalyantra")   
 
     const app = express();
     const server = require('http').Server(app); 
@@ -13,8 +16,19 @@ const main = async()=> {
     app.use(express.urlencoded({extended: true}));   
     app.use("/", routes);  
 
-    server.listen(3004,()=>{
-        console.log("started raspi node server at port 3004")
+    server.listen(3004,async()=>{
+       console.log("started kalyantra node server at port: "+ process.env.PORT)
+       try {
+            await ngrok.kill();
+            setTimeout(async()=>{
+                const url = await ngrok.connect({addr:process.env.PORT,authtoken:process.env.NGROK_TOKEN,name:'decv1',region:'in'});
+                console.log(url); 
+                await espeak({speak:'I am ready'} as EspeakOptions);
+            },400);
+       } catch (error) {
+        console.log("Unable to connect ngrok or espeak "+ error)
+       }
+        
     }); 
 
     process.on('SIGINT', _ => {  
