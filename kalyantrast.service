@@ -1,0 +1,13 @@
+[Unit]
+Description=kalyantrast 
+After=network.target
+Requires=network.target
+
+[Service]
+Type=idle
+User=atharvap
+ExecStart=/usr/bin/node /home/atharvap/Proj/kalyantra/server/main/index.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
