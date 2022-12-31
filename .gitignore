@@ -3,3 +3,5 @@ server/main/*
 *.DS_Store
 .env
 env.dart
+__pycache__
+venv

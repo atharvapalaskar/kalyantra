@@ -1,0 +1,13 @@
+[Unit]
+Description=ngrokn
+After=network.target
+Requires=network.target
+
+[Service]
+Type=idle
+User=atharvap
+ExecStart=/usr/bin/node /home/atharvap/Proj/kalyantra/ngrok-node/ngrok.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
