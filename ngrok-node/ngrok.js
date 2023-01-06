@@ -1,3 +1,6 @@
+// ONLY REQUIRED IF WORKING WITH FLASK APPLICATION AND PYNGROK IS NOT WORKING
+// REFER services/ngrokn.service to create system service
+
 const ngrok = require('ngrok');
 require('dotenv').config();
 

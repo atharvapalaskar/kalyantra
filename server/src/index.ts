@@ -1,3 +1,6 @@
+//WATCH OUT ** PINS ARE DIFFERENT IN THIS PROJECT AS OF THE CIRCUIT DIAGRAM FOR PYSERVER
+//REFER services/kalyantrast.service to create system service
+
 import * as express from "express";
 import routes from "./routes";
 import espeak, { EspeakOptions } from "./utils/espeakcmd";

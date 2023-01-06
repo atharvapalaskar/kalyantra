@@ -5,3 +5,7 @@ server/main/*
 env.dart
 __pycache__
 venv
+firebase.json
+pyserver/picam_img/*
+pyserver/rough.py
+

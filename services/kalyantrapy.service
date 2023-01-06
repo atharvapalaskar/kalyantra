@@ -1,0 +1,13 @@
+[Unit]
+Description=kalyantrapy
+After=network.target
+Requires=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/atharvap/Proj/kalyantra/pyserver
+ExecStart=/home/atharvap/Proj/kalyantra/kalsh.sh
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
