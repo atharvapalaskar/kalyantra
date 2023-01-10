@@ -8,4 +8,4 @@ venv
 firebase.json
 pyserver/picam_img/*
 pyserver/rough.py
-
+*.log

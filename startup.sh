@@ -1,10 +1,10 @@
+# Deprecated
 #! /usr/bin/env bash
 
 #startup audio 
 espeak -a 140 -g 10 "Powered On, Initializing"
 
 #IMP*: comment out below if you're NOT going to use kalyantrast.service
-
 # #Give pi a bit time to setup after boot
 # sleep 5
  
