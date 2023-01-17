@@ -6,6 +6,11 @@ env.dart
 __pycache__
 venv
 firebase.json
+firebase_options.dart
 pyserver/picam_img/*
 pyserver/rough.py
+launch.json
 *.log
+*.key
+*.crt
+*.pem

@@ -1,31 +1,39 @@
 # USING MQTT PROTOCOL 
 # REFER kalsh.sh and services/kalyantrapy.service to create system service
 
-import os   
-from mqtt_pubsub.handler import *
+import os
+from kal_bot_ent import add_sensor_listeners    
 from utils import *    
 from speech_rec import get_text
-from kal_bot_ent import kalyantra  
+from mqtt_events import *  
+from enums import * 
+import asyncio
+from time import sleep
 
-# mqtt
-mq_client.connect(os.getenv('MQTT_URL'), 8883)  
+
+WAKE1 = 'ok yantra'
+WAKE2 = 'do something'
+WAKE3 = 'okay yantra'
+
+# Connect with MQTT Broker 
 mq_client.on_connect = on_connect 
 mq_client.on_subscribe = on_subscribe
 mq_client.on_message = on_message
-mq_client.on_publish = on_publish 
+mq_client.on_publish = on_publish  
 
-mq_client.subscribe(topic_en.BASE.value, qos=1) 
-mq_client.subscribe(topic_en.MOVE.value, qos=1)
-# mq_client.subscribe("sensor", qos=1) 
-mq_client.subscribe(topic_en.PICAM.value, qos=1) 
-mq_client.subscribe('movecm', qos=1)
-
-
+async def mqtt_sub_topics():  
+    sleep(1) #sometimes subs won't work with AWS without a cold sec after connection
+    mq_client.subscribe(topic_en.BASE.value) 
+    mq_client.subscribe(topic_en.MOVE.value) 
+    mq_client.subscribe(topic_en.PICAM.value)    
+ 
 try:
 
-  WAKE1 = 'ok yantra'
-  WAKE2 = 'do something'
-
+  add_sensor_listeners()
+  print("Connecting")
+  mq_client.connect(os.getenv('MQTT_HOST'), 8883, 45) 
+  asyncio.run(mqtt_sub_topics())
+  mq_client.publish("acks",f"client {os.getenv('MQTT_USERNAME')} connected")
   mq_client.loop_start() 
 
   while True:  
@@ -34,17 +42,39 @@ try:
     txt = get_text()
     print(txt)
     if txt != None :
-      if txt.lower().count(WAKE1) > 0 or txt.lower().count(WAKE2) > 0 :
-        print("found wake up")
-        kalyantra.speak("Yes tell me")
-        print("speak commands")
+      if txt.lower().count(WAKE1) > 0 or txt.lower().count(WAKE2) > 0 or txt.lower().count(WAKE3) > 0:
+        # print("found wake up")   
         dotxt = get_text(False)
-        print(f"do: {dotxt}")
-         
-    
+
+        if dotxt == None: 
+          print("no tasks")
+        else:  
+          dotxt = dotxt.lower()
+          print(f"do: {dotxt}") 
+          if dotxt.count('then') > 0: 
+            and_split = dotxt.split('and')
+            tasks = and_split[0].split('then')
+            tasks.append(and_split[1])  
+          elif dotxt.count('and') > 0:
+            tasks = dotxt.split('and')
+          else: 
+            tasks = [dotxt]
+                  
+          for task in tasks: 
+              task = task.strip()
+              print(task) 
+              topic= topic_en.MOVE.value if task.startswith('move') else topic_en.PICAM.value if task.startswith('click') else topic_en.MOVE.value if task.startswith('return') else 'none'
+              msg= task.split(' ')
+              msg.pop(0)
+              msg=' '.join(msg)
+              print(f'msg: {msg}')
+              handler(topic=topic,msg=msg,by='wake')
+          
+          print("all tasks done") 
+  
   # mq_client.loop_forever()
 except KeyboardInterrupt:
   mq_client.loop_stop()
   mq_client.disconnect()
   print(f'app closed by ^C')
-
+ 

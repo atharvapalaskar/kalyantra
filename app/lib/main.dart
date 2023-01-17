@@ -1,15 +1,30 @@
 import 'dart:convert';
-
-import 'package:app/components.dart';
+ 
+import 'package:app/components/indicators.dart';
+import 'package:app/components/photo_viewer.dart'; 
 import 'package:app/enums.dart';
+import 'package:app/kalbot_ent.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart'; 
-import 'package:http/http.dart' as http;
-import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';  
+import 'package:ionicons/ionicons.dart';
+import 'package:line_icons/line_icons.dart'; 
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:mqtt_client/mqtt_client.dart'; 
+import 'package:flutter_svg/flutter_svg.dart';
 
-import 'env.dart';
-void main() {
+import 'components/movesbox.dart';
+import 'components/static_class.dart'; 
+import 'firebase_options.dart';
+import 'mqtt_util.dart';
+
+void main() async{
+  await dotenv.load(fileName: ".env"); 
+  await Firebase.initializeApp(
+  options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -40,25 +55,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
  
   // speech
-  SpeechToText _speechToText = SpeechToText();
-  bool _speechEnabled = false;
-  String recWords = '--';String lastrecWords = '--';
+  SpeechToText speechToText = SpeechToText();
+  bool speechEnabled = false;
+  String recWords = '--'; 
 
   @override
   void initState() {
     super.initState();
-    _initSpeech();
+    _initSpeech(); 
   }
  
   void _initSpeech() async {
-    _speechEnabled = await _speechToText.initialize(
+    speechEnabled = await speechToText.initialize(
       onStatus: (status) {
         switch (status) {
           case 'listening':
             setState(() { recWords = 'listening...';}); 
             break;
           case 'done':
-             _onDone();
+            srHandler('done');
             break;
         } 
       },
@@ -66,125 +81,267 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
  
-  void _startListening() async {
-    setState(() {lastrecWords = recWords;});
-    await _speechToText.listen(onResult: _onSpeechResult);
-    setState(() {});
-  }
- 
-  void _stopListening() async {
-    await _speechToText.stop();
-    setState((){});
-  }
- 
-  void _onSpeechResult(SpeechRecognitionResult result) { 
-    setState(() { recWords = result.recognizedWords; });
-    print('recWr $recWords');
-  }
-  
-  void _onDone(){
-     print('done');
-     if(recWords.startsWith('move')){
-        print('movess');
-        print(recWords.split(' ')[1]);
-        print(recWords.split(' ').length > 2);
-        move(recWords.split(' ').length > 2? '${recWords.split(' ')[1]}-${recWords.split(' ')[2]}' : recWords.split(' ')[1] );
+  void srHandler(evnt) async{
+     switch (evnt) {
+       case 'start':
+         await speechToText.listen(onResult: (result) {
+           setState((){recWords = result.recognizedWords;});
+           print('recWr $recWords');
+         });
+         break;
+         
+      case 'stop':
+         await speechToText.stop(); 
+         setState((){});
+         break; 
+        
+      case 'done':
+        print('Done sr');
+        if(recWords == 'listening...'){ setState(() {recWords = '--';});} 
+        else { mqPublisher(pubTopic.vcmd, recWords);}
      }
+  }  
+   
+  // MQ and Bot
+  MqConnectionState connectionState = MqConnectionState.disconnected; 
+  Kalyantra kalyantra = Kalyantra();
+  String botSvg = BotSimulation().getSvg(); 
+  bool showControls = false;
+
+  void updateKalBotUi(){  
+     botSvg = BotSimulation().getSvg(autoMode: kalyantra.pilot,moving: false);
   }
 
-  //kalyantra apis
-  String? ngrokurl;
-  NgConnectionState connectionState = NgConnectionState.disconnected;
-
-  BotStatus botStatus = BotStatus.notReady;
-  String botMove = BotMoves().halt;
-  String lastbotMove = '--';
-
-  Future<void> connect() async {
-    setState(() {connectionState = NgConnectionState.connecting;});
+  Future<void> connect() async { 
+    setState((){connectionState = MqConnectionState.connecting;}); 
     try {
-       var res = await http.get(Uri.parse('https://api.ngrok.com/tunnels'),headers:{'ngrok-version': '2',"authorization": "Bearer $ngrokApiKey"});
-       var resBody = json.decode(res.body);
-
-       if((resBody["tunnels"] as List).isEmpty){
-         throw 'No url found' ;
-       } else {//assuming you are using free plan only 1 tunnel can be opened 
-          ngrokurl = resBody["tunnels"][0]['public_url'];
-          print(ngrokurl);
-          await botStatusApi('ready'); 
-          if(botStatus == BotStatus.ready){  
-             setState(() {connectionState = NgConnectionState.connected;});
-          } else { throw 'Not ready';}
-       }
-
+       await mqttConnect();
+       kalyantra.status == BotStatus.checking;
+       mqPublisher(pubTopic.base,'check');      
+       setState((){connectionState = MqConnectionState.connected; kalyantra.status = BotStatus.checking; }); 
+       mqHandler();
     } catch (e) {
       print(e);
-      setState(() {connectionState = NgConnectionState.disconnected;});
-    } 
+      setState((){connectionState = MqConnectionState.disconnected;});
+      return;
+    }   
   }
+  
+  mqHandler(){
+      
+    mqClient.updates!.listen((List<MqttReceivedMessage<MqttMessage>> c) {
+      final recMess = c[0].payload as MqttPublishMessage; 
+      final topic = c[0].topic;
+      final payload = MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+      print('topic:$topic, payload:$payload');  
+      try{
+        switch (topic) {
+          case 'status':
+            // eg {"data":"ready"}
+            kalyantra.status = jsonDecode(payload)["data"] == 'ready' ? BotStatus.ready : BotStatus.notReady;
+            print(kalyantra.status);
+            break;
 
-  Future<void> move( String _movee) async { 
-     try { var res = await http.post(Uri.parse('$ngrokurl/moves/$_movee')); 
-      if(json.decode(res.body)['msg']!='ok'){throw 'cant move';}
-      setState(() {lastbotMove = botMove; botMove = _movee; });
-     } catch(e) { print(e); setState(() {connectionState = NgConnectionState.disconnected;});  }
-   
+          case 'task':
+            // eg {"data":{"taskName":"move forward 20 cm","currentTask":"move forward 20 cm","nextTask":"--","lastTask":"move right 20 cm","move":"forward","moving":true,"pilot":false}}
+            dynamic data = jsonDecode(payload)["data"];
+            kalyantra.taskName = data["taskName"];
+            kalyantra.currentTask = data["currentTask"];
+            kalyantra.nextTask = data["nextTask"];
+            kalyantra.lastTask = data["lastTask"];
+            kalyantra.move = data["move"];
+            kalyantra.moving = data["moving"] as bool;
+            kalyantra.pilot = data["pilot"] as bool;   
+            // kalyantra.pilotCM = data["pilotCM"]; 
+            break;
+
+          case 'sensor':
+            // eg {"data":{"frontClear":true,"backClear":false}}
+            dynamic data = jsonDecode(payload)["data"];
+            kalyantra.frontClear = data["frontClear"] as bool;
+            kalyantra.backClear = data["backClear"] as bool; 
+            // kalyantra.moving =  data["moving"] as bool;
+            break;
+
+          case 'cms':
+            //eg {"data":{"pilotCMprog":2}}
+            dynamic data = jsonDecode(payload)["data"];
+            kalyantra.pilotCMprog = data["pilotCMprog"]; 
+            break;
+
+          case 'acks':
+            print("event-acks: $payload");
+            if (payload.startsWith('uploaded:')){
+               kalyantra.recentPhoto = payload.split('uploaded:')[1].trim();
+               print('recent Photo: ${kalyantra.recentPhoto} ');
+               kalyantra.clickingPic = false;
+            }
+            break;
+          case 'err':
+            print("event-err: $payload");
+            break; 
+        } 
+
+        setState(() { 
+          botSvg = BotSimulation().getSvg(autoMode: kalyantra.pilot,frontClear: kalyantra.frontClear,backClear:kalyantra.backClear ,moving: kalyantra.moving);
+        }); 
+
+      }catch(e){
+        print("err at mqHandler($topic): $e");
+      }
+    });
+
+     //   mqClient.published!.listen((MqttPublishMessage message) {
+    //   print( Published notification: topic is ${message.variableHeader!.topicName});
+    // });
+
+    mqClient.onDisconnected = (){
+       setState(() { connectionState = MqConnectionState.disconnected; kalyantra.status = BotStatus.notReady;});
+    };
+
   }
  
-  Future<void> botStatusApi(String  _check) async {
-      try {
-         botStatus == BotStatus.checking;
-         var res = await http.get(Uri.parse('$ngrokurl/bot-status/$_check'));
-         if( json.decode(res.body)['msg'] == 'ready' ){botStatus = BotStatus.ready; return ; } 
-          else{ throw 'Not ready';}
-      } catch (e) {
-        print(e); 
-        return ;
-      }
-       
+  mqPublisher(String topic,String msg){
+       final builder = MqttClientPayloadBuilder();
+       builder.addString(msg);
+       mqClient.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!); 
+       if( topic == pubTopic.picam ){
+         setState(() {
+           kalyantra.clickingPic = true;
+         });
+       }  
   }
-
+  
+  Future<void> move( String movee) async { 
+       mqPublisher(pubTopic.move,movee);
+  }
+  
+  
   @override
   Widget build(BuildContext context) {
-     
+   
      return Scaffold(
       backgroundColor: Colors.black,
-      appBar: PreferredSize(  preferredSize: const Size.fromHeight(60.0),
-          child:SafeArea( child: Container(height: 60,color: Colors.amber,child:const Center(child: Text('Kalyantra: Well-being bot',style: TextStyle(fontSize: 12,color: Colors.black, fontWeight: FontWeight.w700,) )),) ),
+      appBar: PreferredSize( preferredSize: const Size.fromHeight(60.0),
+          child:SafeArea(child: Container(height: 60,color: Colors.amber,child:const Center(child: Text('Kalyantra: Well-being bot',style: TextStyle(fontSize: 12,color: Colors.black, fontWeight: FontWeight.w700,) )),) ),
       ),
       body: Padding(padding: const EdgeInsets.all(30), child: 
        
           Stack(children: [
             
-            Column( mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            Column( mainAxisAlignment: MainAxisAlignment.spaceAround, children: [ 
+               Text('Hi: ${kalyantra.myName}',style:const TextStyle(color: Colors.amber,fontSize: 8,letterSpacing: 0.4,),textAlign: TextAlign.left,),
+                // Bot Simulation and Indicators
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,children:[ 
+                    // Bot Simulation
+                    Stack(alignment: Alignment.center,children: [ 
+                      // Bot svg
+                      SvgPicture.string(botSvg,height: 230,width: 190,),
+                      // Task indicators
+                      SizedBox(height: 190,
+                        child: Column( mainAxisAlignment: MainAxisAlignment.spaceAround,children: [
+                            
+                            Column(children: [
+                                Container(alignment: Alignment.center,child:const Text('Next',style: TextStyle(color: Colors.white,fontSize: 8,letterSpacing: 0.2,height: 1.6,),textAlign: TextAlign.left,)),
+                                const SizedBox(height:6), 
+                                TaskIndicatorWidget(task:kalyantra.nextTask,moving: kalyantra.moving), 
+                            ]), 
+                             
+                            TaskIndicatorWidget(main: true,task: kalyantra.currentTask,moving: kalyantra.moving, cmProgress: kalyantra.pilotCMprog,),
                 
-                RichText( maxLines: 3,text: TextSpan(style: TextStyle(color: Colors.white,fontSize: 12,letterSpacing: 0.4,height: 2.6,fontFamily: GoogleFonts.pressStart2p().fontFamily),
-                  children:[ 
-                    TextSpan(text: 'Bot Move : $botMove',style:const TextStyle(color: Colors.amber,)),
-                    TextSpan(text: '\n Last Move : $lastbotMove',style:const TextStyle(fontSize: 10,)),                  
-                ])),
+                            Column(children: [
+                                Container(alignment: Alignment.center,child:const Text('Last',style: TextStyle(color: Colors.white,fontSize: 8,letterSpacing: 0.2,height: 1.6,),textAlign: TextAlign.left,)),
+                                const SizedBox(height:6), 
+                                TaskIndicatorWidget(task:kalyantra.lastTask,moving: kalyantra.moving,), 
+                            ]),
                 
-                MovesBox(move),
+                          ]),
+                      ), 
+                    ]),
+                    // Status Indicators
+                    SizedBox(height: 210,
+                      child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children:[
+                          StatusIndicatorWidget(text:'Camera',active: kalyantra.camera,size: 25,icon: Ionicons.camera_outline,),
+                          StatusIndicatorWidget(text:'Bot Mic',active: kalyantra.botMic,size: 25,icon: Ionicons.mic_circle_outline,),
+                          StatusIndicatorWidget(text:'Auto Pilot',active: kalyantra.pilot,size: 25,icon: Ionicons.person_circle_outline,),
+                          StatusIndicatorWidget(text:'Returning',active: kalyantra.returning,size: 25,icon: Ionicons.reload_circle_outline,),
+                      ],),
+                    )  
+                ]), 
 
-                Align(alignment: Alignment.centerLeft,child: Text('Voice cmd: $recWords',style:const TextStyle(color: Colors.amber,fontSize: 10,letterSpacing: 0.4,height: 1.6,),textAlign: TextAlign.left,)),
-                Align(alignment: Alignment.centerLeft,child: Text('Last V-cmd: $lastrecWords ',style:const TextStyle(color: Colors.white,fontSize: 8,height: 1.6,),textAlign: TextAlign.left,)),
-             
-                // const SizedBox(height: 1,)
-              ],),
+                Divider(thickness: 0.5, color: Colors.amber,),
+              
+                SizedBox(height: 60,
+                  child: Column(mainAxisAlignment: MainAxisAlignment.spaceEvenly,children: [
+                    Align(alignment: Alignment.centerLeft,child: Text('Total travel: ${kalyantra.totalCm}',style:const TextStyle(color: Colors.amber,fontSize: 8,letterSpacing: 0.4,),textAlign: TextAlign.left,)),
+                    Align(alignment: Alignment.centerLeft,child: Text('Away from origin: ${kalyantra.cmAway}',style:const TextStyle(color: Colors.amber,fontSize: 8,letterSpacing: 0.4,),textAlign: TextAlign.left,)),
+                    Align(alignment: Alignment.centerLeft,child: Text('Task initated by: ${kalyantra.taskBy}',style:const TextStyle(color: Colors.amber,fontSize: 8,letterSpacing: 0.4,),textAlign: TextAlign.left,)),
+                    Align(alignment: Alignment.centerLeft,child: Text('Task name: ${kalyantra.taskName}',style:const TextStyle(color: Colors.amber,fontSize: 8,letterSpacing: 0.4,height: 1.6),textAlign: TextAlign.left,)),
 
-            connectionState != NgConnectionState.connected ?
+                  ],),
+                ),
+
+                Row( mainAxisAlignment: MainAxisAlignment.spaceAround,crossAxisAlignment: CrossAxisAlignment.start,children: [
+                    GestureDetector(onTap: (){ kalyantra.clickingPic? (){} : mqPublisher(pubTopic.picam, 'click');}, 
+                       child: StatusIndicatorWidget(active: !kalyantra.clickingPic, size: 30,text: 'Click',icon: LineIcons.retroCamera,)),
+                    GestureDetector(onTap: kalyantra.clickingPic? (){}: ()async{    
+                         setState(() { kalyantra.photoViewerActive = true;});
+                         final imgUrl = await FirebaseStorage.instance.refFromURL("gs://${dotenv.get('fib_gs')}/${kalyantra.recentPhoto}").getDownloadURL();
+                         print(imgUrl); 
+                         kalyantra.photoViewerActive =  await photoViewer(context,imgUrl);
+                         setState(() {});
+                       },child: StatusIndicatorWidget(active: !kalyantra.photoViewerActive, size: 30,text: 'Recent \nPhoto',icon: LineIcons.photoVideo,ml: true,)),
+                    const StatusIndicatorWidget(active: true, size: 30,text: 'Pilot \ntask +',icon: LineIcons.userEdit,ml: true,),  
+                ],),
+
+                SizedBox(height: 130,
+                child:showControls ? 
+              
+                Column( children:[
+                    MovesBox(move),const SizedBox(height: 20),
+                    Row( mainAxisAlignment: MainAxisAlignment.spaceAround,children:[ 
+                      StatusIndicatorWidget(active: true, size: 35,text: 'Return',icon: Ionicons.reload),
+                      GestureDetector(onDoubleTap:()=> setState(() { showControls = false;}),child: StatusIndicatorWidget(active: true, size: 35,text: 'Exit',icon: LineIcons.alternateSignOut)),
+                     ] )
+                ])
+
+                : Column(children: [
+                    Align(alignment: Alignment.centerLeft,child: Text('App V-cmd: $recWords',style:const TextStyle(color: Colors.amber,fontSize: 8,letterSpacing: 0.4,height: 1.6,),textAlign: TextAlign.left,)),
+                   
+                    const SizedBox(height: 40,),
+                    Row( mainAxisAlignment: MainAxisAlignment.spaceAround,crossAxisAlignment: CrossAxisAlignment.start,children: [
+                        TextButton(style:TextButton.styleFrom( padding: EdgeInsets.zero,), onPressed: (){speechToText.isNotListening ? srHandler('start') : srHandler('stop');},
+                          child:StatusIndicatorWidget(active: true, size: 30,text: 'Voice \nCmd',icon: speechToText.isNotListening ? Icons.mic_off : Icons.mic, ml: true,)),  
+                        StatusIndicatorWidget(active: true, size: 30,text: 'Return',icon: Ionicons.reload,),  
+                        TextButton(style:TextButton.styleFrom( padding: EdgeInsets.zero,), onPressed: ()=> setState(() { showControls = true;}),
+                          child:StatusIndicatorWidget(active: true, size: 30,text: 'Control',icon: LineIcons.dharmachakra,ml: true,)) 
+                    ],), 
+                ]),
+                )
+            ],),
+
+            // Overlay Screen
+            kalyantra.status != BotStatus.ready ?
             Container(width: MediaQuery.of(context).size.width,color: Colors.black.withOpacity(0.86),
              child:  
-              
-               connectionState == NgConnectionState.connecting?
+                 
+               connectionState == MqConnectionState.connecting?
 
                Column(crossAxisAlignment: CrossAxisAlignment.center,mainAxisAlignment: MainAxisAlignment.center,
                 children: const [
                   Text('Connecting',style: TextStyle(color: Colors.white),),
                   SizedBox(height: 12,),
                   CircularProgressIndicator()
-              ],)
-              
+              ],) 
+             
+              : connectionState == MqConnectionState.connected && kalyantra.status == BotStatus.checking ?
+                 Column(crossAxisAlignment: CrossAxisAlignment.center,mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Text('Checking Bot status',style: TextStyle(color: Colors.white),),
+                    SizedBox(height: 12,),
+                    CircularProgressIndicator()
+                ],) 
+               
               : Column(crossAxisAlignment: CrossAxisAlignment.center,mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text('Not connected',style: TextStyle(color: Colors.white),),
@@ -196,15 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           ],),
       
-       ),
-       floatingActionButton: FloatingActionButton( 
-        onPressed:
-            // If not yet listening for speech start, otherwise stop
-            _speechToText.isNotListening ? _startListening : _stopListening,
-        tooltip: 'Listen',backgroundColor:  connectionState != NgConnectionState.connected ? Colors.amber.withOpacity(0.3) : Colors.amber,
-        child: Icon(_speechToText.isNotListening ? Icons.mic_off : Icons.mic),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.miniCenterFloat,
+       ),  
     );
   }
 }
