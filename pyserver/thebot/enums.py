@@ -1,9 +1,18 @@
 from enum import Enum
 
-class topic_en(Enum):
+class sub_topic_en(Enum):
     BASE = 'base'
     MOVE = 'move'   
     PICAM = 'picam'
+    VCMD = 'vcmd'
+
+
+class pub_topic_en(Enum):
+    STATUS = 'status'
+    TASK = 'task'
+    SENSOR = 'sensor'  
+    ACKS = 'acks'
+    ERR = 'err'  
 
 class move_en(Enum):
     FORWARD = 'forward'

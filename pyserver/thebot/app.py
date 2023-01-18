@@ -23,9 +23,10 @@ mq_client.on_publish = on_publish
 
 async def mqtt_sub_topics():  
     sleep(1) #sometimes subs won't work with AWS without a cold sec after connection
-    mq_client.subscribe(topic_en.BASE.value) 
-    mq_client.subscribe(topic_en.MOVE.value) 
-    mq_client.subscribe(topic_en.PICAM.value)    
+    mq_client.subscribe(sub_topic_en.BASE.value) 
+    mq_client.subscribe(sub_topic_en.MOVE.value) 
+    mq_client.subscribe(sub_topic_en.PICAM.value)    
+    mq_client.subscribe(sub_topic_en.VCMD.value)    
  
 try:
 
@@ -33,7 +34,7 @@ try:
   print("Connecting")
   mq_client.connect(os.getenv('MQTT_HOST'), 8883, 45) 
   asyncio.run(mqtt_sub_topics())
-  mq_client.publish("acks",f"client {os.getenv('MQTT_USERNAME')} connected")
+  mq_client.publish(pub_topic_en.ACKS.value,f"client {os.getenv('MQTT_CLIENT_ID')} connected")
   mq_client.loop_start() 
 
   while True:  
@@ -63,14 +64,14 @@ try:
           for task in tasks: 
               task = task.strip()
               print(task) 
-              topic= topic_en.MOVE.value if task.startswith('move') else topic_en.PICAM.value if task.startswith('click') else topic_en.MOVE.value if task.startswith('return') else 'none'
+              topic= sub_topic_en.MOVE.value if task.startswith('move') else sub_topic_en.PICAM.value if task.startswith('click') else sub_topic_en.MOVE.value if task.startswith('return') else 'none'
               msg= task.split(' ')
               msg.pop(0)
               msg=' '.join(msg)
               print(f'msg: {msg}')
-              handler(topic=topic,msg=msg,by='wake')
+              # handler(topic=topic,msg=msg,by='wake')
           
-          print("all tasks done") 
+          # print("all tasks done") 
   
   # mq_client.loop_forever()
 except KeyboardInterrupt:
