@@ -18,9 +18,9 @@ Future<bool> mqttConnect() async {
   mqClient.setProtocolV311(); 
   mqClient.logging(on: false);
  
-  ByteData rootCA = await rootBundle.load('assets/cert/awsiotca.pem');
-  ByteData deviceCert = await rootBundle.load('assets/cert/test001a.cert.pem');
-  ByteData privateKey = await rootBundle.load('assets/cert/test001a.private.key');
+  ByteData rootCA = await rootBundle.load(dotenv.get('aws_iot_ca'));
+  ByteData deviceCert = await rootBundle.load(dotenv.get('thing_cert'));
+  ByteData privateKey = await rootBundle.load(dotenv.get('thing_key'));
   
   SecurityContext context = SecurityContext.defaultContext;
   context.setClientAuthoritiesBytes(rootCA.buffer.asUint8List());
@@ -50,9 +50,6 @@ Future<bool> mqttConnect() async {
     //sometimes subs won't work with AWS without a cold sec after connection
     await MqttUtilities.asyncSleep(1);
    
-    final builder = MqttClientPayloadBuilder();
-    builder.addString('Hello World');
-    
     List<String> subTop = subTopic.all;
     for (var topic in subTop) {
       mqClient.subscribe(topic, MqttQos.atLeastOnce);  

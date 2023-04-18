@@ -6,7 +6,6 @@ class sub_topic_en(Enum):
     PICAM = 'picam'
     VCMD = 'vcmd'
 
-
 class pub_topic_en(Enum):
     STATUS = 'status'
     TASK = 'task'
@@ -20,10 +19,14 @@ class move_en(Enum):
     RIGHT = 'right'
     LEFT = 'left'
     HALT = 'halt'
+    UTURN = 'uturn'
 
 class sensors_en(Enum):
     FRONT = 'front'
     BACK = 'back'
-    SPEED = 'speed'
+    SPEED = 'speed'    
+    SPEEDR = 'speedr' 
+    DISTANCE = 'distance'
     ACTIVE = 'active'
     DEACTIVE = 'deactive'
+ 

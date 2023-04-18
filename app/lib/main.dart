@@ -45,6 +45,10 @@ class MyApp extends StatelessWidget {
   }
 }
 
+  /* to-do 
+   Use any State Management: Stream, Provider or BLOC 
+  */
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key}); 
 
@@ -63,6 +67,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initSpeech(); 
+              botSvg = BotSimulation().getSvg(autoMode: kalyantra.pilot,frontClear: kalyantra.frontClear,backClear:kalyantra.backClear ,moving: kalyantra.moving);
+
   }
  
   void _initSpeech() async {
@@ -111,6 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void updateKalBotUi(){  
      botSvg = BotSimulation().getSvg(autoMode: kalyantra.pilot,moving: false);
   }
+  
 
   Future<void> connect() async { 
     setState((){connectionState = MqConnectionState.connecting;}); 
@@ -291,7 +298,11 @@ class _HomeScreenState extends State<HomeScreen> {
                          kalyantra.photoViewerActive =  await photoViewer(context,imgUrl);
                          setState(() {});
                        },child: StatusIndicatorWidget(active: !kalyantra.photoViewerActive, size: 30,text: 'Recent \nPhoto',icon: LineIcons.photoVideo,ml: true,)),
+                     // to-do 
+                     // On tap options : 1. Trace path add custom task eg 'click' in between & save,
+                     // 2.lists task and select to start, (Pilot task collection in firebase); save timer for task, activate task timer in bot
                     const StatusIndicatorWidget(active: true, size: 30,text: 'Pilot \ntask +',icon: LineIcons.userEdit,ml: true,),  
+                   
                 ],),
 
                 SizedBox(height: 130,

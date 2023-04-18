@@ -9,6 +9,7 @@ logging.basicConfig(filename='kalb.log', encoding='utf-8', level=logging.INFO,)
 def on_connect(mq_client, userdata, flags, rc, properties=None):
     print("CONNACK received with code %s." % rc)
     logging.info(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Connected to mqtt client with {userdata}") 
+    kalyantra.led_handler()
     kalyantra.speak("Namas te, I am Ready") 
 
 def on_publish(client, userdata, mid, properties=None):
@@ -19,6 +20,6 @@ def on_subscribe(client, userdata, mid, granted_qos, properties=None):
  
 def on_message(client, userdata, msg):
     print(f"got a msg -> topic: {msg.topic}" )
-    handler(topic=msg.topic,msg=msg.payload.decode('UTF-8'))
+    handler(topic=msg.topic,msg=msg.payload.decode('UTF-8'),by='app')
     
  
